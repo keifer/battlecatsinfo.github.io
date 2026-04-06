@@ -336,6 +336,85 @@ async function loadScheme(domain, fields) {
 const treasures = [300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 300, 30, 10, 30, 30, 30, 30, 30, 30, 30, 100, 600, 1500, 300, 100, 30, 300, 300, 300, 300, 100];
 
 class ConfigHandler {
+	constructor() {
+		// Initialize current user if not set
+		if (!localStorage.getItem('current-user')) {
+			localStorage.setItem('current-user', 'default');
+		}
+	}
+
+	get currentUser() {
+		return localStorage.getItem('current-user') ?? 'default';
+	}
+	set currentUser(value) {
+		localStorage.setItem('current-user', value);
+	}
+
+	// Get all available users that have favorites
+	getUsers() {
+		const users = new Set();
+		for (let i = 0; i < localStorage.length; i++) {
+			const key = localStorage.key(i);
+			if (key && key.startsWith('star-cats-')) {
+				users.add(key.replace('star-cats-', ''));
+			}
+		}
+		return Array.from(users);
+	}
+
+	// Record a change in favorite cats
+	recordStarCatsChange(oldList, newList) {
+		const user = this.currentUser;
+		const historyKey = `star-cats-history-${user}`;
+		let history = [];
+		const historyStr = localStorage.getItem(historyKey);
+		if (historyStr) {
+			try {
+				history = JSON.parse(historyStr);
+			} catch (e) {
+				history = [];
+			}
+		}
+		
+		const timestamp = new Date().toISOString();
+		history.push({
+			timestamp,
+			oldList: oldList || [],
+			newList: newList || [],
+			added: (newList || []).filter(cat => !(oldList || []).some(c => c.id === cat.id)),
+			removed: (oldList || []).filter(cat => !(newList || []).some(c => c.id === cat.id)),
+		});
+		
+		localStorage.setItem(historyKey, JSON.stringify(history));
+	}
+
+	// Get favorite cats history for current user
+	getStarCatsHistory() {
+		const user = this.currentUser;
+		const historyKey = `star-cats-history-${user}`;
+		const historyStr = localStorage.getItem(historyKey);
+		if (historyStr) {
+			try {
+				return JSON.parse(historyStr);
+			} catch (e) {
+				return [];
+			}
+		}
+		return [];
+	}
+
+	// Get all users and their favorite cats for generating report
+	getAllUsersStarCats() {
+		const result = {};
+		const users = this.getUsers();
+		for (const user of users) {
+			const key = `star-cats-${user}`;
+			const value = localStorage.getItem(key);
+			result[user] = (value !== null) ? JSON.parse(value) : [];
+		}
+		return result;
+	}
+
 	get unit() {
 		return localStorage.getItem('unit') ?? 'S';
 	}
@@ -395,15 +474,23 @@ class ConfigHandler {
 			localStorage.setItem('theme', value);
 	}
 	get starCats() {
-		let value = localStorage.getItem('star-cats');
+		const user = this.currentUser;
+		const key = `star-cats-${user}`;
+		let value = localStorage.getItem(key);
 		return (value !== null) ? JSON.parse(value) : [];
 	}
 	set starCats(list) {
+		const user = this.currentUser;
+		const key = `star-cats-${user}`;
+		const oldList = this.starCats;
 		if (Array.isArray(list)) {
 			const value = JSON.stringify(list);
-			localStorage.setItem('star-cats', value);
+			localStorage.setItem(key, value);
+			// Record the change
+			this.recordStarCatsChange(oldList, list);
 		} else if (list === null) {
-			localStorage.removeItem('star-cats');
+			localStorage.removeItem(key);
+			this.recordStarCatsChange(oldList, []);
 		} else {
 			throw new Error(`Unexpected value of cats: ${JSON.stringify(list)}`);
 		}

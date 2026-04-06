@@ -1,12 +1,15 @@
 import {config, numStr, numStrT, round, pagination} from './common.mjs';
 import {loadAllCats} from './unit.mjs';
 
+// Expose config to global scope for console debugging
+window.config = config;
+
 var cats;
 var cats_old;
-var hide_search = false;
+var hide_search = false;  // Show search filters by default
 var last_forms;
-var form_s = 5;
-var per_page = 10;
+var form_s = 0;  // Default to show all forms
+var per_page = 9999;  // Default to show all items per page
 let def_lv;
 let plus_lv;
 let display_forms;
@@ -30,6 +33,85 @@ const atkBtn = atk_s.firstElementChild.firstElementChild;
 const traitBtn = trait_s.firstElementChild.firstElementChild;
 const abBtn = ab_s.firstElementChild.firstElementChild;
 const name_search = document.getElementById("name-search");
+
+// User management elements
+const userSelect = document.getElementById('user-select');
+const btnNewUser = document.getElementById('btn-new-user');
+const currentUserDisplay = document.getElementById('current-user-display');
+
+// Update user display
+function updateUserDisplay() {
+	const user = config.currentUser;
+	const favCount = config.starCats.length;
+	currentUserDisplay.textContent = `[${user}] ⭐${favCount}`;
+}
+
+// User change handler
+function onUserChange(event) {
+	const newUser = event.target.value;
+	config.currentUser = newUser;
+	updateUserDisplay();
+	// Automatically recalculate with favorites filter after user change
+	only_my_fav.checked = true;
+	document.getElementById('per_page').value = '9999';
+	per_page = 9999;
+	applyFavoritesFilter(false);  // Apply filter without showing alert
+	calculate('dps', true);
+}
+
+// New user handler
+function onNewUserClick(event) {
+	event.preventDefault();
+	const newUserName = prompt('請輸入新使用者名稱：');
+	if (newUserName && newUserName.trim()) {
+		config.currentUser = newUserName.trim();
+		
+		// Add new option if not exists
+		let optionExists = false;
+		for (let option of userSelect.options) {
+			if (option.value === newUserName.trim()) {
+				optionExists = true;
+				break;
+			}
+		}
+		if (!optionExists) {
+			const newOption = document.createElement('option');
+			newOption.value = newUserName.trim();
+			newOption.textContent = newUserName.trim();
+			userSelect.appendChild(newOption);
+		}
+		
+		userSelect.value = newUserName.trim();
+		updateUserDisplay();
+		renderTable(last_forms);
+	}
+	return false;
+}
+
+// Star button click handler
+function onStarButtonClick(form, starBtn) {
+	const starCats = config.starCats;
+	const catIndex = starCats.findIndex(c => c.id === form.id);
+	
+	if (catIndex >= 0) {
+		// Remove from favorites
+		starCats.splice(catIndex, 1);
+		starBtn.textContent = '☆';
+		starBtn.title = '加入最愛';
+	} else {
+		// Add to favorites
+		starCats.push({
+			id: form.id,
+			name: form.name || form.jp_name,
+			icon: form.icon
+		});
+		starBtn.textContent = '⭐';
+		starBtn.title = '從最愛中移除';
+	}
+	
+	config.starCats = starCats;
+	updateUserDisplay();
+}
 
 function rerender(page) {
 	const url = new URL(location.href);
@@ -84,20 +166,44 @@ function filterByNameOrId(results) {
 function renderTable(forms, page = 1) {
 	last_forms = forms;
 	forms = filterByNameOrId(forms);
+	
+	// Group forms by base cat (主ID) and keep highest sort value
+	const groupedByBaseCat = new Map();
+	for (const [sortValue, form] of forms) {
+		const baseCat = form.base;
+		const baseId = baseCat.id;
+		
+		if (!groupedByBaseCat.has(baseId)) {
+			groupedByBaseCat.set(baseId, {
+				baseCat: baseCat,
+				forms: [],
+				maxSortValue: sortValue
+			});
+		}
+		
+		const group = groupedByBaseCat.get(baseId);
+		group.forms.push(form);
+		group.maxSortValue = Math.max(group.maxSortValue, sortValue);
+	}
+	
+	// Convert to array and sort by maxSortValue
+	const groupedForms = Array.from(groupedByBaseCat.values())
+		.sort((a, b) => b.maxSortValue - a.maxSortValue);
+	
 	var H = per_page * page;
-	display_forms = forms.slice(H - per_page, H);
+	display_forms = groupedForms.slice(H - per_page, H);
 	tbody.textContent = "";
-	search_result.textContent = `顯示第${H - per_page + 1}到第${Math.min(forms.length, H)}個結果，共有${forms.length}個結果`;
+	search_result.textContent = `顯示第${H - per_page + 1}到第${Math.min(groupedForms.length, H)}個結果，共有${groupedForms.length}個結果`;
 
-	if (0 == forms.length) {
-		tbody.innerHTML = '<tr><td colSpan="13">沒有符合條件的貓咪！</td></tr>';
+	if (0 == groupedForms.length) {
+		tbody.innerHTML = '<tr><td colSpan="14">沒有符合條件的貓咪！</td></tr>';
 		return;
 	}
 
 	pages_a.textContent = '';
 	for (const c of pagination({
 		page,
-		max: Math.ceil(forms.length / per_page),
+		max: Math.ceil(groupedForms.length / per_page),
 	})) {
 		const td = pages_a.appendChild(document.createElement("td"));
 		td.textContent = c;
@@ -109,27 +215,89 @@ function renderTable(forms, page = 1) {
 		}
 	}
 
+	// Get current user's favorite cats
+	const starCats = config.starCats;
+	
 	for (let i = 0; i < display_forms.length; ++i) {
 		const tr = tbody.appendChild(document.createElement("tr"));
-		const F = display_forms[i][1];
-		const texts = [F.id + "-" + (F.lvc + 1), `Lv ${F.baseLv} + ` + F.plusLv, "", "", F.hp, F.atkm, round(F.dps), F.kb, F.range, numStrT(F.attackF), F.speed, numStr(F.price), numStr(display_forms[i][0])];
-		for (let j = 0; j < 13; ++j) {
-			var e = tr.appendChild(document.createElement("td"));
-			if (j == 3) {
-				if (F.name)
-					e.appendChild(document.createTextNode(F.name));
-				if (F.jp_name) {
-					e.appendChild(document.createElement("br"));
-					e.appendChild(document.createTextNode(F.jp_name));
-				}
-			} else {
-				e.textContent = texts[j].toString();
+		const group = display_forms[i];
+		const baseCat = group.baseCat;
+		
+		// Sort forms by lvc to ensure correct order
+		group.forms.sort((a, b) => a.lvc - b.lvc);
+		const highestForm = group.forms[group.forms.length - 1]; // Highest form
+		
+		// Column 0: ID (only main ID, no sub-form number)
+		const idTd = tr.appendChild(document.createElement("td"));
+		idTd.textContent = baseCat.id;
+		
+		// Column 1: Level
+		const lvTd = tr.appendChild(document.createElement("td"));
+		lvTd.textContent = `Lv ${highestForm.baseLv} + ` + highestForm.plusLv;
+		
+		// Column 2: Icons (all forms)
+		const iconsTd = tr.appendChild(document.createElement("td"));
+		iconsTd.style.textAlign = 'center';
+		iconsTd.style.padding = '4px';
+		iconsTd.style.verticalAlign = 'middle';
+		
+		for (const form of group.forms) {
+			const a = document.createElement("a");
+			a.href = "./unit.html?id=" + form.id.toString();
+			a.style.display = 'inline-block';
+			a.style.marginRight = '4px';
+			const img = document.createElement("img");
+			img.src = form.icon;
+			img.style.maxWidth = '80px';
+			img.style.maxHeight = '65px';
+			img.title = form.name || form.jp_name;
+			a.appendChild(img);
+			iconsTd.appendChild(a);
+		}
+		
+		// Column 3: Names (all forms) - max 3 lines
+		const namesTd = tr.appendChild(document.createElement("td"));
+		namesTd.style.textAlign = 'center';
+		namesTd.style.fontSize = '18px';
+		namesTd.style.padding = '4px';
+		namesTd.style.verticalAlign = 'middle';
+		namesTd.style.maxHeight = '74px';
+		namesTd.style.overflow = 'hidden';
+		
+		const nameSpans = [];
+		for (const form of group.forms) {
+			if (form.name) {
+				const span = document.createElement("span");
+				span.textContent = form.name;
+				span.style.display = 'block';
+				span.style.lineHeight = '1.3';
+				nameSpans.push(span);
+				namesTd.appendChild(span);
 			}
 		}
-		const a = tr.children[2].appendChild(document.createElement("a"));
-		a.href = "./unit.html?id=" + F.id.toString();
-		const img = a.appendChild(new Image(104, 79));
-		img.src = F.icon;
+		
+		// Columns 4-12: Stats (using highest form)
+		const texts = [highestForm.hp, highestForm.atkm, round(highestForm.dps), highestForm.kb, highestForm.range, numStrT(highestForm.attackF), highestForm.speed, numStr(highestForm.price), numStr(group.maxSortValue)];
+		for (let j = 0; j < 9; ++j) {
+			const e = tr.appendChild(document.createElement("td"));
+			e.textContent = texts[j].toString();
+		}
+		
+		// Column 13: Star button for favorites (use highest form ID for favorites tracking)
+		const starTd = tr.appendChild(document.createElement("td"));
+		const isFav = starCats.some(c => c.id === highestForm.id);
+		const starBtn = starTd.appendChild(document.createElement("button"));
+		starBtn.style.border = 'none';
+		starBtn.style.background = 'none';
+		starBtn.style.cursor = 'pointer';
+		starBtn.style.fontSize = '20px';
+		starBtn.style.padding = '0';
+		starBtn.textContent = isFav ? '⭐' : '☆';
+		starBtn.title = isFav ? '從最愛中移除' : '加入最愛';
+		starBtn.onclick = (e) => {
+			e.preventDefault();
+			onStarButtonClick(highestForm, starBtn);
+		};
 	}
 }
 
@@ -314,7 +482,31 @@ loadAllCats().then(_cats => {
 			document.getElementById('per_page').value = Q;
 		}
 	}
-	calculate(filter || '', true);
+	// Set default preferences
+	// 1. Set default theme to light mode
+	config.colorTheme = 'light';
+	document.documentElement.classList.remove('dark');
+	
+	// 2. Set default sort to DPS
+	sort_expr.value = 'dps';
+	
+	// 3. Set default to show only favorites
+	only_my_fav.checked = true;
+	
+	// 4. Set default page display to "All"
+	document.getElementById('per_page').value = '9999';
+	per_page = 9999;
+	
+	// 5. Show search bar and filters by default
+	document.documentElement.style.setProperty("--mhide", "block");
+	document.getElementById('tables').style.left = "360px";
+	document.getElementById('tables').style.width = "calc(100% - 400px)";
+	hide_search = false;
+	toggle_s.textContent = "隱藏搜尋器";  // Set initial toggle button text
+	
+	// Apply favorites filter with initialization (no alert)
+	applyFavoritesFilter(false);
+	calculate('dps', true);
 	Q = params.get('page');
 	if (Q) {
 		Q = parseInt(Q);
@@ -322,6 +514,32 @@ loadAllCats().then(_cats => {
 			rerender(Q);
 		}
 	}
+
+	// Initialize user management - populate user list dynamically
+	// Get all users from localStorage and populate the select dropdown
+	const allUsers = config.getUsers();
+	const existingValues = new Set();
+	
+	// Collect existing option values
+	for (let option of userSelect.options) {
+		existingValues.add(option.value);
+	}
+	
+	// Add any users from localStorage that aren't already in the dropdown
+	for (const user of allUsers) {
+		if (!existingValues.has(user)) {
+			const newOption = document.createElement('option');
+			newOption.value = user;
+			newOption.textContent = user;
+			userSelect.appendChild(newOption);
+		}
+	}
+	
+	// Set current user
+	userSelect.value = config.currentUser;
+	updateUserDisplay();
+	userSelect.addEventListener('change', onUserChange);
+	btnNewUser.addEventListener('click', onNewUserClick);
 });
 
 document.querySelectorAll("button").forEach(elem => {
@@ -361,20 +579,34 @@ document.getElementById("filter-clear").onclick = function() {
 	sort_expr.value = "";
 	calculate();
 };
-only_my_fav.onchange = function() {
+
+// Apply favorites filter - extracted into separate function for reuse
+function applyFavoritesFilter(showAlert = false) {
 	let favs;
 	if (only_my_fav.checked) {
 		favs = config.starCats;
-		if (!favs.length)
-			return alert('我的最愛裡還沒有貓咪！\n可以去貓咪資訊裡加入我的最愛或用貓咪圖鑑管理！');
-		favs = favs.map(x => cats_old[x.id]);
+		if (!favs.length) {
+			if (showAlert) {
+				alert('我的最愛裡還沒有貓咪！\n可以去貓咪資訊裡加入我的最愛或用貓咪圖鑑管理！');
+			}
+			only_my_fav.checked = false;
+			cats = cats_old;
+		} else {
+			favs = favs.map(x => cats_old[x.id]);
+			cats = favs;
+		}
+	} else {
+		cats = cats_old;
 	}
-	cats = only_my_fav.checked ? favs : cats_old;
+}
+
+only_my_fav.onchange = function() {
+	applyFavoritesFilter(true);
 	calculate(simplify(ori_expr.value));
 };
 toggle_s.onclick = function() {
 	if (hide_search) {
-		tables.style.left = "390px";
+		tables.style.left = "360px";
 		tables.style.width = "calc(100% - 400px)";
 		document.documentElement.style.setProperty("--mhide", "block");
 		toggle_s.textContent = "隱藏搜尋器";

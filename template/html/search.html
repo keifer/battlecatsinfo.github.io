@@ -24,6 +24,8 @@
 		padding: 0;
 		margin: 0;
 		width: 100%;
+		background-color: #fff;
+		color: #000;
 	}
 	#loader {
 		position: absolute;
@@ -59,6 +61,16 @@
 	th,
 	td {
 		border: 1px solid #d1d5d5;
+		color: #000;
+	}
+	table {
+		page-break-inside: avoid;
+	}
+	tr {
+		page-break-inside: avoid;
+	}
+	thead tr {
+		page-break-after: avoid;
 	}
 	.w3-centered td {
 		vertical-align: middle;
@@ -155,16 +167,71 @@
 		background-color: #ccc !important;
 	}
 	.w3-table td {
-		padding-top: 0;
-		padding-bottom: 0;
-		padding-left: 2px;
-		padding-right: 2px;
+		padding-top: 6px;
+		padding-bottom: 6px;
+		padding-left: 5px;
+		padding-right: 5px;
+		font-size: 18px;
+	}
+	table,
+	td,
+	th {
+		font-size: 18px;
+	}
+	/* Print optimization */
+	@media print {
+		* {
+			margin: 0;
+			padding: 0;
+		}
+		body {
+			margin: 0;
+			padding: 5mm;
+			background: white;
+			color: black;
+		}
+		table {
+			width: 100%;
+			page-break-inside: auto;
+			font-size: 17px;
+		}
+		tr {
+			page-break-inside: avoid;
+			page-break-after: auto;
+		}
+		thead {
+			display: table-header-group;
+		}
+		td,
+		th {
+			font-size: 17px;
+			padding: 5px 4px;
+		}
+		td img {
+			max-width: 60px;
+			max-height: 50px;
+		}
 	}
 	:root {
-		--mhide: block;
+		--mhide: none;
 	}
 	.may-hide {
 		display: var(--mhide);
+	}
+	/* Tables panel - will be repositioned by JavaScript */
+	#tables {
+		left: 0px;
+		width: 100%;
+	}
+	/* Hide top navigation bar */
+	.topnav {
+		display: none !important;
+	}
+	#site-search {
+		display: none !important;
+	}
+	#site-s-result {
+		display: none !important;
 	}
 	#cattype {
 		width: 100%;
@@ -465,6 +532,16 @@
 				</li>
 			</ul>
 			<div id="tables" style="margin: 20px 0px;position: absolute;top: 0px;left: 360px;vertical-align: middle;min-width: 800px;width: calc(100% - 400px);">
+				<div class="may-hide" style="display: flex; align-items: center; gap: 1em; margin-bottom: 1em; padding: 0.5em; background-color: #f0f0f0; border-radius: 4px;">
+					<label style="margin: 0; font-weight: bold;">當前使用者：</label>
+					<select id="user-select" style="padding: 0.5em; border-radius: 4px; border: 1px solid #ccc;">
+						<option value="messi">Messi</option>
+						<option value="小佑">小佑</option>
+						<option value="default">預設使用者</option>
+					</select>
+					<button id="btn-new-user" style="padding: 0.5em 1em; border-radius: 4px; background-color: #4CAF50; color: white; border: none; cursor: pointer;">新增使用者</button>
+					<span id="current-user-display" style="margin-left: auto; font-weight: bold; color: #2196F3;"></span>
+				</div>
 				<div class="may-hide">
 					<input type="search" placeholder="搜尋名稱或Cat id" id="name-search">
 				</div>
@@ -478,12 +555,12 @@
 				</div>
 				<p><span id="search-result"></span><a href="#" id="toggle-s" style="padding-left: 1em;">隱藏搜尋器</a>
 					<select id="form-s" style="float: right;">
-						<option value="0">全型態</option>
+						<option value="0" selected>全型態</option>
 						<option value="1">第一型態</option>
 						<option value="2">第二型態</option>
 						<option value="3">第三型態</option>
 						<option value="4">第四型態</option>
-						<option value="5" selected>最高型態</option>
+						<option value="5">最高型態</option>
 					</select>
 					<span style="float: right;">
 						每頁顯示
@@ -501,9 +578,9 @@
 				<table class="w3-table w3-centered" style="width: 100%;margin-bottom: 0px;">
 					<thead>
 						<tr id="th" style="cursor: pointer;">
-							<td title="id">ID</td>
+							<td title="id">主ID</td>
 							<td>Lv</td>
-							<td style="width: 110px;">圖示</td>
+							<td>圖示</td>
 							<td>名稱</td>
 							<td title="hp">HP</td>
 							<td title="atk">攻擊力</td>
@@ -514,6 +591,7 @@
 							<td title="speed">跑速</td>
 							<td title="price">價格</td>
 							<td>排序值</td>
+							<td style="width: 60px;">⭐</td>
 						</tr>
 					</thead>
 					<tbody id="tbody"></tbody>

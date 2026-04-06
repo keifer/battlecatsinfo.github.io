@@ -239,6 +239,19 @@
 
 		<h2 id="favorite" style="text-align: center;">我的最愛</h2>
 		<div class="w3-row w3-section odds">
+			<h3>選擇使用者</h3>
+			<div class="form w3-card">
+				<p>
+					<select id="user-select" style="margin-left: 1em; padding: 0.5em;">
+						<option value="messi">Messi</option>
+						<option value="小佑">小佑</option>
+						<option value="default">預設使用者</option>
+					</select>
+					<button type="button" id="btn-new-user" style="margin-left: 1em; padding: 0.5em 1em;">新增使用者</button>
+				</p>
+			</div>
+
+			<h3 style="margin-top: 2em;">最愛清單</h3>
 			<table id="my-stars" class="w3-table w3-striped w3-centered">
 				<tr>
 					<td>ID</td>
@@ -247,6 +260,22 @@
 					<td>動作</td>
 				</tr>
 			</table>
+
+			<h3 style="margin-top: 2em;">變動紀錄</h3>
+			<div class="form w3-card">
+				<button type="button" id="btn-view-history" style="margin: 1em; padding: 0.5em 1em;">查看變動紀錄</button>
+				<button type="button" id="btn-export-history" style="margin: 1em; padding: 0.5em 1em;">匯出所有使用者清單</button>
+			</div>
+			<div id="history-container" style="margin-top: 1em; display: none;">
+				<h4>變動紀錄詳情：</h4>
+				<table id="history-table" class="w3-table w3-striped w3-small" style="word-break: break-word;">
+					<tr>
+						<th>時間</th>
+						<th>新增</th>
+						<th>移除</th>
+					</tr>
+				</table>
+			</div>
 		</div>
 
 		<h2 id="treasure" style="text-align: center;">金寶設定</h2>
